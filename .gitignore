@@ -1,0 +1,29 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Node
+**/node_modules/
+**/dist/
+**/.vite/
+**/.cache/
+
+# Java / Maven
+**/target/
+**/.classpath
+**/.project
+**/.settings/
+
+# Env / secrets
+.env
+.env.*
+**/application-local.properties
+**/application-prod.properties
+
+
