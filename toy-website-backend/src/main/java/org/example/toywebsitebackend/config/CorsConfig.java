@@ -3,6 +3,7 @@ package org.example.toywebsitebackend.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
@@ -17,6 +18,15 @@ public class CorsConfig {
 
     @Bean
     public CorsFilter corsFilter() {
+        UrlBasedCorsConfigurationSource source = (UrlBasedCorsConfigurationSource) corsConfigurationSource();
+        return new CorsFilter(source);
+    }
+
+    /**
+     * Spring Security needs a CorsConfigurationSource (http.cors()) so that even 401/403 responses include CORS headers.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
         
@@ -58,8 +68,7 @@ public class CorsConfig {
         
         // 对所有路径应用CORS配置
         source.registerCorsConfiguration("/**", config);
-        
-        return new CorsFilter(source);
+        return source;
     }
 }
 

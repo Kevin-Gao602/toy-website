@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -45,7 +46,8 @@ public class SecurityConfig {
             // 禁用CSRF（因为使用JWT，不需要CSRF保护）
             .csrf(AbstractHttpConfigurer::disable)
             
-            // CORS 配置由 CorsConfig.java 中的 CorsFilter 处理
+            // Enable CORS inside Spring Security so 401/403 responses also include CORS headers.
+            .cors(Customizer.withDefaults())
             
             // 会话管理：无状态（使用JWT）
             .sessionManagement(session -> 

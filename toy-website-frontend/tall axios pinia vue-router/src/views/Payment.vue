@@ -31,11 +31,16 @@
             This is the pre-payment milestone. Add Stripe/PayPal later — for now we stop here.
           </p>
 
+          <div v-if="pageError" class="alert error">{{ pageError }}</div>
+
           <button class="btn-primary" disabled title="Coming soon">
             Pay ${{ formatMoney(total) }}
           </button>
 
           <div class="actions">
+            <button class="btn-link" :disabled="isCreatingOrder" @click="payLater">
+              {{ isCreatingOrder ? 'Creating order...' : 'Pay later' }}
+            </button>
             <router-link :to="{ path: '/checkout', query: { step: 3 } }" class="btn-link">
               Back to Review
             </router-link>
@@ -64,16 +69,20 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useCheckoutStore, SHIPPING_METHODS } from '@/stores/checkout'
+import { orderApi } from '@/api/orders'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const cartStore = useCartStore()
 const checkoutStore = useCheckoutStore()
+
+const isCreatingOrder = ref(false)
+const pageError = ref('')
 
 function formatMoney(value) {
   return Number(value || 0).toFixed(2)
@@ -104,6 +113,34 @@ onMounted(async () => {
     router.push('/cart')
   }
 })
+
+async function payLater() {
+  pageError.value = ''
+  if (isCreatingOrder.value) return
+
+  if (!checkoutStore.isAddressValid) {
+    router.push({ path: '/checkout', query: { step: 1 } })
+    return
+  }
+
+  isCreatingOrder.value = true
+  try {
+    const payload = {
+      shippingAddress: checkoutStore.shippingAddressText,
+      shippingMethod: checkoutStore.shippingMethod
+    }
+    const res = await orderApi.createOrder(payload)
+
+    // Cart is cleared server-side; refresh cart store so UI badge updates immediately
+    await cartStore.fetchCart()
+
+    router.push({ path: '/orders', query: { created: String(res.data?.orderId || '') } })
+  } catch (e) {
+    pageError.value = e?.response?.data?.message || e?.message || 'Failed to create order'
+  } finally {
+    isCreatingOrder.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -220,12 +257,37 @@ h2 {
 
 .actions {
   margin-top: 0.75rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 }
 
 .btn-link {
   color: #667eea;
   text-decoration: none;
   font-weight: 700;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.btn-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.alert {
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  margin: 0 0 0.75rem 0;
+  font-weight: 600;
+}
+
+.alert.error {
+  background: #fff1f1;
+  border: 1px solid #ffd0d0;
+  color: #9b1c1c;
 }
 
 .summary-row {
@@ -255,4 +317,4 @@ h2 {
 }
 </style>
 
-
+ 

@@ -15,6 +15,15 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException e) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", "Bad Request");
+        errorResponse.put("message", e.getMessage());
+        errorResponse.put("type", e.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleException(Exception e) {
         e.printStackTrace(); // 打印完整堆栈信息到控制台
