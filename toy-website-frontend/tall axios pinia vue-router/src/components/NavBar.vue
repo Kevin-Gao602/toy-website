@@ -8,7 +8,11 @@
       <div class="nav-links">
         <router-link to="/" class="nav-link">Home</router-link>
         
-        <router-link to="/cart" class="nav-link cart-link">
+        <router-link
+          v-if="!isAdmin"
+          to="/cart"
+          class="nav-link cart-link"
+        >
           Cart
           <span v-if="cartStore.itemCount > 0" class="cart-badge">
             {{ cartStore.itemCount }}
@@ -16,7 +20,14 @@
         </router-link>
 
         <template v-if="authStore.isAuthenticated">
-          <router-link to="/orders" class="nav-link">My Orders</router-link>
+          <router-link v-if="!isAdmin" to="/orders" class="nav-link">My Orders</router-link>
+          <router-link
+            v-if="isAdmin"
+            to="/admin"
+            class="nav-link"
+          >
+            Admin
+          </router-link>
           <span class="user-info">Hello, {{ authStore.user?.name }}</span>
           <button @click="handleLogout" class="btn-logout">Logout</button>
         </template>
@@ -33,10 +44,13 @@
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useRouter } from 'vue-router'
+import { computed } from 'vue'
 
 const authStore = useAuthStore()
 const cartStore = useCartStore()
 const router = useRouter()
+
+const isAdmin = computed(() => authStore.user?.role === 'ADMIN')
 
 function handleLogout() {
   authStore.logout()

@@ -65,8 +65,13 @@ public class SecurityConfig {
                 // 登录/注册放行
                 .antMatchers("/api/auth/login", "/api/auth/register").permitAll()
 
+                // Admin endpoints
+                .antMatchers("/api/admin/**").hasRole("ADMIN")
+
                 // 产品与测试接口放行（可按需调整）
-                .antMatchers("/api/products/**", "/api/test/**").permitAll()
+                .antMatchers("/api/products/**").permitAll()
+                .antMatchers("/api/test/ping").permitAll()
+                .antMatchers("/api/test/**").hasRole("ADMIN")
 
                 // 其他接口默认需要登录（包括 /api/auth/me）
                 .anyRequest().authenticated()
