@@ -12,13 +12,18 @@ export const orderApi = {
   },
 
   // 获取订单详情
-  getOrder(id) {
-    return api.get(`/orders/${id}`)
+  getOrder(id, config = {}) {
+    return api.get(`/orders/${id}`, config)
   },
 
   // 取消订单（可选）
   cancelOrder(id) {
     return api.put(`/orders/${id}/cancel`)
+  },
+
+  // 永久删除订单记录
+  deleteOrder(id) {
+    return api.delete(`/orders/${id}`)
   }
 }
 

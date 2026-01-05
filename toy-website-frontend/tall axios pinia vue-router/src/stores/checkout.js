@@ -38,6 +38,9 @@ export const useCheckoutStore = defineStore('checkout', () => {
 
   const shippingMethod = ref(SHIPPING_METHODS.STANDARD.code)
 
+  // Order created when user reaches payment (pending for 5 minutes)
+  const order = ref(null) // { orderId, orderNumber, status, expiresAt, userId }
+
   const shippingFee = computed(() => {
     return shippingMethod.value === SHIPPING_METHODS.EXPRESS.code
       ? SHIPPING_METHODS.EXPRESS.fee
@@ -72,12 +75,14 @@ export const useCheckoutStore = defineStore('checkout', () => {
     if (!saved) return
     if (saved.address) address.value = { ...address.value, ...saved.address }
     if (saved.shippingMethod) shippingMethod.value = saved.shippingMethod
+    if (saved.order) order.value = saved.order
   }
 
   function persistToSession() {
     writeSession({
       address: address.value,
-      shippingMethod: shippingMethod.value
+      shippingMethod: shippingMethod.value,
+      order: order.value
     })
   }
 
@@ -94,7 +99,18 @@ export const useCheckoutStore = defineStore('checkout', () => {
   function reset() {
     address.value = { fullName: '', phone: '', line1: '', city: '', postalCode: '' }
     shippingMethod.value = SHIPPING_METHODS.STANDARD.code
+    order.value = null
     sessionStorage.removeItem(SESSION_KEY)
+  }
+
+  function setOrder(nextOrder) {
+    order.value = nextOrder
+    persistToSession()
+  }
+
+  function clearOrder() {
+    order.value = null
+    persistToSession()
   }
 
   // auto-hydrate on first use
@@ -106,8 +122,11 @@ export const useCheckoutStore = defineStore('checkout', () => {
     shippingFee,
     isAddressValid,
     shippingAddressText,
+    order,
     setAddressField,
     setShippingMethod,
+    setOrder,
+    clearOrder,
     persistToSession,
     hydrateFromSession,
     reset

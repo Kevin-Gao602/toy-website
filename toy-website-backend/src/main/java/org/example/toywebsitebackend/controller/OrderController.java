@@ -48,6 +48,20 @@ public class OrderController {
         Long userId = SecurityUtil.requireUserId();
         return ResponseEntity.ok(orderService.getOrder(userId, id));
     }
+
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<Map<String, Object>> cancelOrder(@PathVariable Long id) {
+        Long userId = SecurityUtil.requireUserId();
+        orderService.cancelOrder(userId, id);
+        return ResponseEntity.ok(Map.of("message", "Order cancelled"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> deleteOrder(@PathVariable Long id) {
+        Long userId = SecurityUtil.requireUserId();
+        orderService.deleteOrder(userId, id);
+        return ResponseEntity.ok(Map.of("message", "Order deleted"));
+    }
 }
 
 

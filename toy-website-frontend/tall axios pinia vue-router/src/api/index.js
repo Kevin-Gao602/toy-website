@@ -32,10 +32,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const silent = Boolean(error?.config?.silent)
+
     // 处理网络错误或连接失败
     if (!error.response) {
-      console.error('❌ Network Error:', error.message)
-      console.error('💡 Make sure the backend server is running at:', API_BASE_URL)
+      if (!silent) {
+        console.error('❌ Network Error:', error.message)
+        console.error('💡 Make sure the backend server is running at:', API_BASE_URL)
+      }
       
       // 如果是网络错误，提供更友好的提示
       if (error.code === 'ECONNABORTED') {
@@ -57,12 +61,14 @@ api.interceptors.response.use(
     
     // 处理其他 HTTP 错误
     if (error.response) {
-      console.error('❌ API Error:', {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        url: error.config?.url
-      })
+      if (!silent) {
+        console.error('❌ API Error:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          url: error.config?.url
+        })
+      }
     }
     
     return Promise.reject(error)

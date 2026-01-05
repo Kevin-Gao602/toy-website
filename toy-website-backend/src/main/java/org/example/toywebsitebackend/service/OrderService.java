@@ -5,6 +5,7 @@ import org.example.toywebsitebackend.model.Order;
 import org.example.toywebsitebackend.model.OrderItem;
 import org.example.toywebsitebackend.model.Product;
 import org.example.toywebsitebackend.model.User;
+import org.example.toywebsitebackend.exception.NotFoundException;
 import org.example.toywebsitebackend.model.enums.OrderStatus;
 import org.example.toywebsitebackend.model.enums.ShippingMethod;
 import org.example.toywebsitebackend.repository.CartItemRepository;
@@ -148,11 +149,48 @@ public class OrderService {
     @Transactional(readOnly = true)
     public Map<String, Object> getOrder(Long userId, Long orderId) {
         Order o = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> new NotFoundException("Order not found"));
         if (o.getUser() == null || o.getUser().getId() == null || !o.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("Order not found");
+            throw new NotFoundException("Order not found");
         }
         return toOrderDto(o, orderItemRepository.findByOrderId(orderId));
+    }
+
+    @Transactional
+    public void cancelOrder(Long userId, Long orderId) {
+        Order o = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+        if (o.getUser() == null || o.getUser().getId() == null || !o.getUser().getId().equals(userId)) {
+            throw new NotFoundException("Order not found");
+        }
+
+        // Soft-delete semantics per PRD: set status to CANCELLED.
+        if (o.getStatus() == OrderStatus.CANCELLED) return;
+        if (o.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+            throw new IllegalArgumentException("Only pending orders can be cancelled");
+        }
+
+        restoreStockFromOrder(o.getId());
+        o.setStatus(OrderStatus.CANCELLED);
+        orderRepository.save(o);
+    }
+
+    @Transactional
+    public void deleteOrder(Long userId, Long orderId) {
+        Order o = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+        if (o.getUser() == null || o.getUser().getId() == null || !o.getUser().getId().equals(userId)) {
+            throw new NotFoundException("Order not found");
+        }
+
+        // If pending, cancel first to restore stock safely.
+        if (o.getStatus() == OrderStatus.AWAITING_PAYMENT) {
+            restoreStockFromOrder(o.getId());
+        }
+
+        // Remove child rows first to avoid FK constraint issues.
+        orderItemRepository.deleteByOrderId(o.getId());
+        orderRepository.delete(o);
     }
 
     private Map<String, Object> toOrderDto(Order o, List<OrderItem> items) {
@@ -206,19 +244,22 @@ public class OrderService {
         if (expired.isEmpty()) return;
 
         for (Order o : expired) {
-            // Restore stock from order items
-            List<OrderItem> items = orderItemRepository.findByOrderId(o.getId());
-            for (OrderItem i : items) {
-                Product p = productRepository.findById(i.getProductId()).orElse(null);
-                if (p != null) {
-                    int stock = p.getStock() == null ? 0 : p.getStock();
-                    int qty = i.getQuantity() == null ? 0 : i.getQuantity();
-                    p.setStock(stock + qty);
-                    productRepository.save(p);
-                }
-            }
+            restoreStockFromOrder(o.getId());
             o.setStatus(OrderStatus.CANCELLED);
             orderRepository.save(o);
+        }
+    }
+
+    private void restoreStockFromOrder(Long orderId) {
+        List<OrderItem> items = orderItemRepository.findByOrderId(orderId);
+        for (OrderItem i : items) {
+            Product p = productRepository.findById(i.getProductId()).orElse(null);
+            if (p != null) {
+                int stock = p.getStock() == null ? 0 : p.getStock();
+                int qty = i.getQuantity() == null ? 0 : i.getQuantity();
+                p.setStock(stock + qty);
+                productRepository.save(p);
+            }
         }
     }
 }

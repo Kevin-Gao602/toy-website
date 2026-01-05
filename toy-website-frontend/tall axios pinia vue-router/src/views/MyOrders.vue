@@ -67,6 +67,22 @@
 
           <div class="actions">
             <router-link :to="`/orders/${order.id}`" class="btn-link">View detail</router-link>
+            <button
+              v-if="canCancel(order)"
+              class="btn-danger"
+              :disabled="isCancellingId === order.id"
+              @click="cancel(order)"
+            >
+              {{ isCancellingId === order.id ? 'Cancelling...' : 'Delete Order' }}
+            </button>
+            <button
+              v-if="canDeleteRecord(order)"
+              class="btn-danger-outline"
+              :disabled="isDeletingId === order.id"
+              @click="deleteRecord(order)"
+            >
+              {{ isDeletingId === order.id ? 'Deleting...' : 'Delete Record' }}
+            </button>
           </div>
         </div>
       </div>
@@ -79,14 +95,18 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { orderApi } from '@/api/orders'
+import { useCheckoutStore } from '@/stores/checkout'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const checkoutStore = useCheckoutStore()
 
 const orders = ref([])
 const isLoading = ref(false)
 const error = ref('')
 const now = ref(Date.now())
+const isCancellingId = ref(null)
+const isDeletingId = ref(null)
 let timer = null
 let refreshTimer = null
 
@@ -143,14 +163,14 @@ function remainingLabel(order) {
 
 function statusLabel(order) {
   if (order.status === 'CANCELLED') return 'CANCELLED'
-  if (order.status === 'FULFILLED') return 'FULFILLED'
+  if (order.status === 'FULFILLED') return 'SUCCESS'
   if (isExpired(order)) return 'EXPIRED'
-  return 'AWAITING_PAYMENT'
+  return 'PENDING'
 }
 
 function statusClass(order) {
   const s = statusLabel(order)
-  if (s === 'FULFILLED') return 'ok'
+  if (s === 'SUCCESS') return 'ok'
   if (s === 'CANCELLED' || s === 'EXPIRED') return 'bad'
   return 'warn'
 }
@@ -165,6 +185,49 @@ async function loadOrders() {
     error.value = e?.response?.data?.message || e?.message || 'Failed to load orders'
   } finally {
     isLoading.value = false
+  }
+}
+
+function canCancel(order) {
+  // "Delete" means set status to CANCELLED (soft delete).
+  // Only allow for pending orders that haven't expired.
+  return order.status === 'AWAITING_PAYMENT' && remainingMs(order) > 0
+}
+
+async function cancel(order) {
+  if (!confirm(`Delete order ${order.orderNumber}? This will cancel it.`)) return
+  if (isCancellingId.value) return
+  isCancellingId.value = order.id
+  try {
+    await orderApi.cancelOrder(order.id)
+    await loadOrders()
+  } catch (e) {
+    alert(e?.response?.data?.message || e?.message || 'Failed to cancel order')
+  } finally {
+    isCancellingId.value = null
+  }
+}
+
+function canDeleteRecord(order) {
+  // Only allow hard delete for orders that are no longer pending.
+  // (Pending orders should be cancelled first to avoid confusing UX.)
+  return order.status === 'CANCELLED' || isExpired(order)
+}
+
+async function deleteRecord(order) {
+  if (!confirm(`Permanently delete order record ${order.orderNumber}? This cannot be undone.`)) return
+  if (isDeletingId.value) return
+  isDeletingId.value = order.id
+  try {
+    await orderApi.deleteOrder(order.id)
+    if (checkoutStore.order?.orderId === order.id) {
+      checkoutStore.clearOrder()
+    }
+    await loadOrders()
+  } catch (e) {
+    alert(e?.response?.data?.message || e?.message || 'Failed to delete order record')
+  } finally {
+    isDeletingId.value = null
   }
 }
 
@@ -355,6 +418,8 @@ h1 {
   margin-top: 0.75rem;
   display: flex;
   justify-content: flex-end;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .btn-primary,
@@ -393,6 +458,36 @@ h1 {
   color: #667eea;
   text-decoration: none;
   font-weight: 800;
+}
+
+.btn-danger {
+  border: none;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-danger-outline {
+  background: transparent;
+  color: #e74c3c;
+  border: 2px solid #e74c3c;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.btn-danger-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
 
