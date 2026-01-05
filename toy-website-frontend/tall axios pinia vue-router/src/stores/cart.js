@@ -26,6 +26,11 @@ export const useCartStore = defineStore('cart', () => {
       return response.data
     } catch (error) {
       console.error('Failed to fetch cart:', error)
+      // If the user is not authenticated, treat cart as empty (UI will redirect to login where appropriate)
+      if (error?.response?.status === 401) {
+        items.value = []
+        return { items: [] }
+      }
       throw error
     } finally {
       isLoading.value = false
@@ -80,6 +85,12 @@ export const useCartStore = defineStore('cart', () => {
     }
   }
 
+  // Local-only reset (used on logout / auth loss)
+  function resetCart() {
+    items.value = []
+    isLoading.value = false
+  }
+
   return {
     items,
     isLoading,
@@ -90,7 +101,8 @@ export const useCartStore = defineStore('cart', () => {
     addItem,
     updateQuantity,
     removeItem,
-    clearCart
+    clearCart,
+    resetCart
   }
 })
 

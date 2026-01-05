@@ -16,7 +16,7 @@
       <p class="product-price">${{ formatPrice(product.price) }}</p>
       
       <button 
-        @click="handleAddToCart"
+        @click.stop="handleAddToCart"
         :disabled="product.stock === 0 || isAdding"
         class="btn-add-to-cart"
       >
@@ -106,7 +106,9 @@ async function handleAddToCart() {
     await cartStore.addItem(props.product.id, 1)
     // 可以添加成功提示
   } catch (error) {
-    alert(error.response?.data?.message || 'Failed to add item to cart')
+    const status = error?.response?.status
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error
+    alert(backendMessage || error?.message || (status ? `Failed to add item to cart (HTTP ${status})` : 'Failed to add item to cart'))
   } finally {
     isAdding.value = false
   }

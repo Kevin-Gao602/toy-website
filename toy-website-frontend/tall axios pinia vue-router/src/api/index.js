@@ -46,7 +46,7 @@ api.interceptors.response.use(
     }
     
     // 处理 401 未授权
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
       const authStore = useAuthStore()
       authStore.logout()
       // 如果不在登录页，重定向到登录页

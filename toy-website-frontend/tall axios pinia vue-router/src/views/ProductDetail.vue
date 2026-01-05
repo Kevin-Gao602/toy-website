@@ -132,7 +132,9 @@ async function handleAddToCart() {
     alert('Product added to cart!')
     quantity.value = 1
   } catch (error) {
-    alert(error.response?.data?.message || 'Failed to add item to cart')
+    const status = error?.response?.status
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.error
+    alert(backendMessage || error?.message || (status ? `Failed to add item to cart (HTTP ${status})` : 'Failed to add item to cart'))
   } finally {
     isAdding.value = false
   }

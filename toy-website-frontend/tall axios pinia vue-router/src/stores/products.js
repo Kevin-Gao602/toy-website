@@ -10,6 +10,13 @@ export const useProductsStore = defineStore('products', () => {
   const totalPages = ref(0)
   const currentPage = ref(0)
 
+  // Hide leftover test data that may exist in local DB
+  function isTestProduct(p) {
+    const name = (p?.name || '').toLowerCase()
+    const category = (p?.category || '').toLowerCase()
+    return category === 'test' || name === 'test product'
+  }
+
   async function fetchProducts(params = {}) {
     try {
       isLoading.value = true
@@ -21,7 +28,8 @@ export const useProductsStore = defineStore('products', () => {
       })
       
       const data = response.data
-      products.value = data.content || data || []
+      const rawProducts = data.content || data || []
+      products.value = Array.isArray(rawProducts) ? rawProducts.filter((p) => !isTestProduct(p)) : []
       totalElements.value = data.totalElements || products.value.length
       totalPages.value = data.totalPages || 1
       currentPage.value = data.number || 0
@@ -55,7 +63,7 @@ export const useProductsStore = defineStore('products', () => {
     try {
       isLoading.value = true
       const response = await productApi.getProduct(id)
-      currentProduct.value = response.data
+      currentProduct.value = isTestProduct(response.data) ? null : response.data
       return response.data
     } catch (error) {
       console.error('Failed to fetch product:', error)
