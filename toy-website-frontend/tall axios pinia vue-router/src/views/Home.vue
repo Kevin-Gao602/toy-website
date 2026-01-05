@@ -76,12 +76,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProductsStore } from '@/stores/products'
+import { productApi } from '@/api/products'
 import ProductCard from '@/components/ProductCard.vue'
 import ProductCardSkeleton from '@/components/ProductCardSkeleton.vue'
-import LoadingSpinner from '@/components/LoadingSpinner.vue'
 
 const router = useRouter()
 const productsStore = useProductsStore()
@@ -93,6 +93,40 @@ const currentPage = ref(0)
 
 // 从产品列表中提取唯一分类
 const categories = ref([])
+
+async function loadCategories() {
+  try {
+    // Always fetch categories from the unfiltered product list (not from the current filtered view)
+    const pageSize = 200
+    const first = await productApi.getProducts({ page: 0, size: pageSize, search: '', category: '' })
+    const data = first.data || {}
+    const totalPages = Number(data.totalPages || 1)
+
+    const set = new Set()
+    const addFrom = (content) => {
+      ;(content || []).forEach((p) => {
+        if (p?.category) set.add(p.category)
+      })
+    }
+
+    addFrom(data.content || data || [])
+
+    // If backend returns paged content, fetch remaining pages to capture all categories.
+    // For a toy-shop sized catalog this is fine and avoids the “dropdown shrinks” bug.
+    if (totalPages > 1) {
+      for (let page = 1; page < totalPages; page += 1) {
+        const res = await productApi.getProducts({ page, size: pageSize, search: '', category: '' })
+        const d = res.data || {}
+        addFrom(d.content || d || [])
+      }
+    }
+
+    categories.value = [...set].sort((a, b) => String(a).localeCompare(String(b)))
+  } catch (e) {
+    // Don't block the page if category loading fails; filters will still work.
+    console.warn('Failed to load categories:', e)
+  }
+}
 
 async function loadProducts() {
   try {
@@ -116,16 +150,6 @@ async function loadProducts() {
       isLoading: productsStore.isLoading,
       totalElements: productsStore.totalElements
     })
-    
-    // 提取分类（如果后端不提供，从前端数据提取）
-    if (productsStore.products.length > 0) {
-      const uniqueCategories = [...new Set(productsStore.products.map(p => p.category).filter(Boolean))]
-      if (uniqueCategories.length > 0) {
-        categories.value = uniqueCategories
-      }
-    } else {
-      console.warn('⚠️ 产品列表为空')
-    }
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to load products'
     console.error('❌ 加载产品失败:', err)
@@ -164,6 +188,7 @@ onMounted(() => {
     isLoading: productsStore.isLoading,
     productsCount: productsStore.products.length
   })
+  loadCategories()
   loadProducts()
 })
 </script>
