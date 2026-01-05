@@ -2,9 +2,13 @@ package org.example.toywebsitebackend.controller;
 
 import org.example.toywebsitebackend.model.User;
 import org.example.toywebsitebackend.repository.UserRepository;
+import org.example.toywebsitebackend.security.CustomUserDetails;
+import org.example.toywebsitebackend.security.JwtTokenProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -15,8 +19,7 @@ import java.util.Optional;
  * 认证Controller
  * 提供用户注册、登录等认证相关的API接口
  * 
- * 注意：当前版本为简化版本，未实现JWT token
- * 后续需要添加JWT支持
+ * 注意：当前版本已实现 JWT token（HS256）
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -24,10 +27,12 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     /**
@@ -65,7 +70,10 @@ public class AuthController {
 
         User savedUser = userRepository.save(user);
 
-        // 构建响应（暂时不返回token，后续需要添加JWT）
+        // 签发 JWT
+        String token = jwtTokenProvider.generateToken(savedUser);
+
+        // 构建响应
         Map<String, Object> response = new HashMap<>();
         response.put("message", "注册成功");
         response.put("user", Map.of(
@@ -74,8 +82,7 @@ public class AuthController {
             "name", savedUser.getName(),
             "role", savedUser.getRole().toString()
         ));
-        // TODO: 添加JWT token
-        response.put("token", "NOT_IMPLEMENTED_YET");
+        response.put("token", token);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -113,7 +120,10 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         }
 
-        // 构建响应（暂时不返回token，后续需要添加JWT）
+        // 签发 JWT
+        String token = jwtTokenProvider.generateToken(user);
+
+        // 构建响应
         Map<String, Object> response = new HashMap<>();
         response.put("message", "登录成功");
         response.put("user", Map.of(
@@ -122,8 +132,7 @@ public class AuthController {
             "name", user.getName(),
             "role", user.getRole().toString()
         ));
-        // TODO: 添加JWT token
-        response.put("token", "NOT_IMPLEMENTED_YET");
+        response.put("token", token);
 
         return ResponseEntity.ok(response);
     }
@@ -132,18 +141,34 @@ public class AuthController {
      * 获取当前用户信息
      * GET /api/auth/me
      * 
-     * 注意：当前版本未实现JWT验证，返回占位符响应
+     * 需要在请求头中携带 Authorization: Bearer <token>
      */
     @GetMapping("/me")
-    public ResponseEntity<Map<String, Object>> getCurrentUser(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        
-        // TODO: 实现JWT token验证
-        Map<String, Object> error = new HashMap<>();
-        error.put("error", "JWT认证未实现，请先实现JWT token验证");
-        error.put("message", "此接口需要JWT token验证，当前版本暂未实现");
-        
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(error);
+    public ResponseEntity<Map<String, Object>> getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails)) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Unauthorized");
+            error.put("message", "Not authenticated");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        }
+
+        CustomUserDetails principal = (CustomUserDetails) authentication.getPrincipal();
+        Optional<User> userOpt = userRepository.findByEmail(principal.getUsername());
+        if (userOpt.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Unauthorized");
+            error.put("message", "User not found");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        }
+
+        User user = userOpt.get();
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", user.getId());
+        response.put("email", user.getEmail());
+        response.put("name", user.getName());
+        response.put("role", user.getRole().toString());
+        return ResponseEntity.ok(response);
     }
 }
 

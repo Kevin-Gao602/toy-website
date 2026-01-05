@@ -1,7 +1,10 @@
 package org.example.toywebsitebackend.config;
 
+import org.example.toywebsitebackend.security.JwtAuthenticationEntryPoint;
+import org.example.toywebsitebackend.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -9,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Spring Security配置
@@ -21,6 +25,14 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, JwtAuthenticationEntryPoint authenticationEntryPoint) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -39,16 +51,27 @@ public class SecurityConfig {
             .sessionManagement(session -> 
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+
+            // 未登录/无效 token 时的统一返回
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint))
             
             // 请求授权配置
-            .authorizeHttpRequests(auth -> auth
-                // 暂时允许所有API访问（开发阶段）
-                // 后续会改为：
-                // - /api/auth/** -> permitAll()
-                // - /api/products/** -> permitAll()
-                // - /api/cart/**, /api/orders/** -> authenticated()
-                .anyRequest().permitAll()
-            );
+            .authorizeRequests(auth -> auth
+                // 预检请求放行
+                .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // 登录/注册放行
+                .antMatchers("/api/auth/login", "/api/auth/register").permitAll()
+
+                // 产品与测试接口放行（可按需调整）
+                .antMatchers("/api/products/**", "/api/test/**").permitAll()
+
+                // 其他接口默认需要登录（包括 /api/auth/me）
+                .anyRequest().authenticated()
+            )
+
+            // JWT 过滤器
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         
         return http.build();
     }
