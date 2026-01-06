@@ -5,9 +5,11 @@ import org.example.toywebsitebackend.service.ProductService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -36,26 +38,15 @@ public class ProductController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDir) {
         
         try {
-            Pageable pageable = PageRequest.of(page, size);
-            Page<Product> productPage;
-
-            // 根据参数选择查询方式（通过Service层处理业务逻辑）
-            if (category != null && !category.isEmpty() && search != null && !search.isEmpty()) {
-                // 同时有分类和搜索关键词
-                productPage = productService.getProductsByCategoryAndKeyword(category, search, pageable);
-            } else if (category != null && !category.isEmpty()) {
-                // 只有分类
-                productPage = productService.getProductsByCategory(category, pageable);
-            } else if (search != null && !search.isEmpty()) {
-                // 只有搜索关键词
-                productPage = productService.searchProducts(search, pageable);
-            } else {
-                // 都没有，查询所有
-                productPage = productService.getAllProducts(pageable);
-            }
+            Pageable pageable = PageRequest.of(page, size, resolveSort(sortBy, sortDir));
+            Page<Product> productPage = productService.queryProducts(category, search, minPrice, maxPrice, pageable);
 
             // 构建响应
             Map<String, Object> response = new HashMap<>();
@@ -75,6 +66,20 @@ public class ProductController {
             errorResponse.put("message", e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
+    }
+
+    private Sort resolveSort(String sortBy, String sortDir) {
+        if (sortBy == null || sortBy.trim().isEmpty()) return Sort.unsorted();
+
+        String field = sortBy.trim();
+        // Whitelist to avoid invalid property paths
+        if (!field.equals("price") && !field.equals("name") && !field.equals("createdAt")) {
+            return Sort.unsorted();
+        }
+
+        Sort.Direction dir = Sort.Direction.ASC;
+        if (sortDir != null && sortDir.equalsIgnoreCase("desc")) dir = Sort.Direction.DESC;
+        return Sort.by(dir, field);
     }
 
     /**

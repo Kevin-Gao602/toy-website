@@ -22,6 +22,62 @@
             </option>
           </select>
         </div>
+
+        <div class="sort-filter">
+          <label>Sort:</label>
+          <select v-model="selectedSort" @change="handleFilter" class="sort-select">
+            <option value="">Recommended</option>
+            <option value="createdAt:desc">Newest</option>
+            <option value="price:asc">Price: Low → High</option>
+            <option value="price:desc">Price: High → Low</option>
+            <option value="name:asc">Name: A → Z</option>
+          </select>
+        </div>
+
+        <div class="price-filter" v-if="maxCatalogPrice > 0">
+          <label>Price:</label>
+          <div class="price-chips">
+            <button
+              v-for="b in priceBuckets"
+              :key="b.key"
+              class="chip"
+              :class="{ active: selectedPriceBucket === b.key }"
+              @click="selectBucket(b.key)"
+              type="button"
+            >
+              {{ b.label }}
+            </button>
+          </div>
+
+          <div class="range-wrap" v-if="selectedPriceBucket === 'custom'">
+            <div class="range-values">
+              <span class="range-pill">${{ displayMin }}</span>
+              <span class="range-sep">–</span>
+              <span class="range-pill">${{ displayMax }}</span>
+            </div>
+
+            <div class="dual-range">
+              <input
+                class="range range-min"
+                type="range"
+                :min="minCatalogPrice"
+                :max="maxCatalogPrice"
+                :step="1"
+                v-model.number="priceMin"
+                @change="handleFilter"
+              />
+              <input
+                class="range range-max"
+                type="range"
+                :min="minCatalogPrice"
+                :max="maxCatalogPrice"
+                :step="1"
+                v-model.number="priceMax"
+                @change="handleFilter"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 加载状态 - 显示骨架屏 -->
@@ -76,7 +132,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProductsStore } from '@/stores/products'
 import { productApi } from '@/api/products'
@@ -88,13 +144,76 @@ const productsStore = useProductsStore()
 
 const searchQuery = ref('')
 const selectedCategory = ref('')
+const selectedSort = ref('')
 const error = ref(null)
 const currentPage = ref(0)
 
 // 从产品列表中提取唯一分类
 const categories = ref([])
 
-async function loadCategories() {
+const minCatalogPrice = ref(0)
+const maxCatalogPrice = ref(0)
+const selectedPriceBucket = ref('all') // all | bucket-* | custom
+const priceMin = ref(0)
+const priceMax = ref(0)
+
+const priceBuckets = [
+  { key: 'all', label: 'All' },
+  { key: 'bucket-25', label: 'Under $25' },
+  { key: 'bucket-25-50', label: '$25–$50' },
+  { key: 'bucket-50-100', label: '$50–$100' },
+  { key: 'bucket-100', label: '$100+' },
+  { key: 'custom', label: 'Custom' }
+]
+
+const sortBy = computed(() => (selectedSort.value ? selectedSort.value.split(':')[0] : ''))
+const sortDir = computed(() => (selectedSort.value ? selectedSort.value.split(':')[1] : ''))
+
+const normalizedMin = computed(() => Math.min(Number(priceMin.value || 0), Number(priceMax.value || 0)))
+const normalizedMax = computed(() => Math.max(Number(priceMin.value || 0), Number(priceMax.value || 0)))
+
+const displayMin = computed(() => Math.max(minCatalogPrice.value, Math.floor(normalizedMin.value)))
+const displayMax = computed(() => Math.min(maxCatalogPrice.value, Math.ceil(normalizedMax.value)))
+
+function selectBucket(key) {
+  selectedPriceBucket.value = key
+
+  const min = minCatalogPrice.value
+  const max = maxCatalogPrice.value
+
+  if (key === 'all') {
+    priceMin.value = min
+    priceMax.value = max
+  } else if (key === 'bucket-25') {
+    priceMin.value = min
+    priceMax.value = Math.min(25, max)
+  } else if (key === 'bucket-25-50') {
+    priceMin.value = Math.min(25, max)
+    priceMax.value = Math.min(50, max)
+  } else if (key === 'bucket-50-100') {
+    priceMin.value = Math.min(50, max)
+    priceMax.value = Math.min(100, max)
+  } else if (key === 'bucket-100') {
+    priceMin.value = Math.min(100, max)
+    priceMax.value = max
+  } else if (key === 'custom') {
+    // Keep current values
+    priceMin.value = priceMin.value || min
+    priceMax.value = priceMax.value || max
+  }
+
+  currentPage.value = 0
+  loadProducts()
+}
+
+function extractPriceNumber(p) {
+  const v = p?.price
+  if (v == null) return null
+  const n = typeof v === 'number' ? v : Number(String(v))
+  return Number.isFinite(n) ? n : null
+}
+
+async function loadCatalogMeta() {
   try {
     // Always fetch categories from the unfiltered product list (not from the current filtered view)
     const pageSize = 200
@@ -103,9 +222,16 @@ async function loadCategories() {
     const totalPages = Number(data.totalPages || 1)
 
     const set = new Set()
+    let minP = Number.POSITIVE_INFINITY
+    let maxP = 0
     const addFrom = (content) => {
       ;(content || []).forEach((p) => {
         if (p?.category) set.add(p.category)
+        const priceNum = extractPriceNumber(p)
+        if (priceNum != null) {
+          minP = Math.min(minP, priceNum)
+          maxP = Math.max(maxP, priceNum)
+        }
       })
     }
 
@@ -122,6 +248,13 @@ async function loadCategories() {
     }
 
     categories.value = [...set].sort((a, b) => String(a).localeCompare(String(b)))
+
+    // Price bounds
+    const hasPrice = Number.isFinite(minP) && maxP > 0
+    minCatalogPrice.value = hasPrice ? Math.floor(minP) : 0
+    maxCatalogPrice.value = hasPrice ? Math.ceil(maxP) : 0
+    priceMin.value = minCatalogPrice.value
+    priceMax.value = maxCatalogPrice.value
   } catch (e) {
     // Don't block the page if category loading fails; filters will still work.
     console.warn('Failed to load categories:', e)
@@ -135,14 +268,22 @@ async function loadProducts() {
       page: currentPage.value,
       size: 20,
       search: searchQuery.value,
-      category: selectedCategory.value
+      category: selectedCategory.value,
+      minPrice: effectiveMinPrice.value,
+      maxPrice: effectiveMaxPrice.value,
+      sortBy: sortBy.value,
+      sortDir: sortDir.value
     })
     
     await productsStore.fetchProducts({
       page: currentPage.value,
       size: 20,
       search: searchQuery.value,
-      category: selectedCategory.value
+      category: selectedCategory.value,
+      minPrice: effectiveMinPrice.value,
+      maxPrice: effectiveMaxPrice.value,
+      sortBy: sortBy.value,
+      sortDir: sortDir.value
     })
     
     console.log('✅ 产品加载完成:', {
@@ -188,8 +329,26 @@ onMounted(() => {
     isLoading: productsStore.isLoading,
     productsCount: productsStore.products.length
   })
-  loadCategories()
+  loadCatalogMeta()
   loadProducts()
+})
+
+const effectiveMinPrice = computed(() => {
+  if (maxCatalogPrice.value <= 0) return undefined
+  if (selectedPriceBucket.value === 'all') return undefined
+
+  const min = displayMin.value
+  // If the slider is set to the full lower bound, don't send it
+  return min > minCatalogPrice.value ? min : undefined
+})
+
+const effectiveMaxPrice = computed(() => {
+  if (maxCatalogPrice.value <= 0) return undefined
+  if (selectedPriceBucket.value === 'all') return undefined
+
+  const max = displayMax.value
+  // If the slider is set to the full upper bound, don't send it
+  return max < maxCatalogPrice.value ? max : undefined
 })
 </script>
 
@@ -197,7 +356,7 @@ onMounted(() => {
 .home {
   min-height: calc(100vh - 200px);
   padding: 2rem 0;
-  background: #f5f7fa;
+  background: transparent;
 }
 
 .container {
@@ -208,10 +367,15 @@ onMounted(() => {
 
 .filters {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem 1rem;
   margin-bottom: 2rem;
   flex-wrap: wrap;
   align-items: center;
+  padding: 1rem;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.12);
 }
 
 .search-box {
@@ -257,6 +421,155 @@ onMounted(() => {
 .category-select:focus {
   outline: none;
   border-color: #667eea;
+}
+
+.sort-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sort-filter label {
+  font-weight: 600;
+  color: #333;
+}
+
+.sort-select {
+  padding: 0.75rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.sort-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.price-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 520px;
+  min-width: 320px;
+}
+
+.price-filter label {
+  font-weight: 600;
+  color: #333;
+}
+
+.price-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  background: #f3f5ff;
+  color: #3b49df;
+  border: 1px solid rgba(59, 73, 223, 0.18);
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(59, 73, 223, 0.28);
+}
+
+.chip.active {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+.range-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 260px;
+  flex: 1;
+}
+
+.range-values {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.range-pill {
+  background: rgba(44, 62, 80, 0.06);
+  color: #2c3e50;
+  border: 1px solid rgba(44, 62, 80, 0.12);
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.range-sep {
+  color: rgba(44, 62, 80, 0.6);
+  font-weight: 700;
+}
+
+.dual-range {
+  position: relative;
+  height: 34px;
+}
+
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.25), rgba(102, 126, 234, 0.55));
+  outline: none;
+  position: absolute;
+  left: 0;
+  top: 14px;
+  pointer-events: none; /* enable only thumbs */
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #667eea;
+  border: 2px solid white;
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.35);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #667eea;
+  border: 2px solid white;
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.35);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.range-min {
+  z-index: 2;
+}
+
+.range-max {
+  z-index: 3;
 }
 
 .products-grid {

@@ -1,12 +1,13 @@
 <template>
   <div id="app">
+    <TopMarquee text="Last Chance: Boxing Day Sale Ends This Weekend" />
     <NavBar />
     <ConnectionStatus />
     <main class="main-content">
       <router-view />
     </main>
     <footer class="footer">
-      <p>&copy; 2024 Toy Shop. All rights reserved.</p>
+      <p>&copy; 2026 Toy Shop. All rights reserved.</p>
     </footer>
   </div>
 </template>
@@ -14,6 +15,7 @@
 <script setup>
 import NavBar from '@/components/NavBar.vue'
 import ConnectionStatus from '@/components/ConnectionStatus.vue'
+import TopMarquee from '@/components/TopMarquee.vue'
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
@@ -56,6 +58,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   line-height: 1.6;
   color: #333;
+  background: #f5f7fa;
 }
 
 #app {

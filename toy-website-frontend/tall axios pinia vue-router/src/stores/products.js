@@ -24,7 +24,11 @@ export const useProductsStore = defineStore('products', () => {
         page: params.page || 0,
         size: params.size || 20,
         search: params.search || '',
-        category: params.category || ''
+        category: params.category || '',
+        minPrice: params.minPrice ?? undefined,
+        maxPrice: params.maxPrice ?? undefined,
+        sortBy: params.sortBy || undefined,
+        sortDir: params.sortDir || undefined
       })
       
       const data = response.data
